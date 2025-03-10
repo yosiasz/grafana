@@ -1,7 +1,11 @@
-import { act, render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import React from 'react';
 
-import { Combobox, ComboboxOption } from './Combobox';
+import { Field } from '../Forms/Field';
+
+import { Combobox } from './Combobox';
+import { ComboboxOption } from './types';
 
 // Mock data for the Combobox options
 const options: ComboboxOption[] = [
@@ -49,8 +53,17 @@ describe('Combobox', () => {
     expect(onChangeHandler).toHaveBeenCalledWith(options[0]);
   });
 
-  it("shows the placeholder with the menu open when there's no value", async () => {
+  it('shows the placeholder with the menu open when value is null', async () => {
     render(<Combobox options={options} value={null} onChange={onChangeHandler} placeholder="Select an option" />);
+
+    const input = screen.getByRole('combobox');
+    await userEvent.click(input);
+
+    expect(input).toHaveAttribute('placeholder', 'Select an option');
+  });
+
+  it('shows the placeholder with the menu open when value is undefined', async () => {
+    render(<Combobox options={options} value={undefined} onChange={onChangeHandler} placeholder="Select an option" />);
 
     const input = screen.getByRole('combobox');
     await userEvent.click(input);
@@ -106,6 +119,73 @@ describe('Combobox', () => {
     expect(screen.queryByDisplayValue('Option 2')).not.toBeInTheDocument();
   });
 
+  it.each(['very valid value', '', 0])('should handle an option with %p as a value', async (val) => {
+    const options = [
+      { label: 'Second option', value: '2' },
+      { label: 'Default', value: val },
+    ];
+
+    const ControlledCombobox = () => {
+      const [value, setValue] = React.useState<string | number | null>(null);
+
+      return (
+        <Combobox
+          options={options}
+          value={value}
+          onChange={(opt) => {
+            setValue(opt.value);
+          }}
+        />
+      );
+    };
+
+    render(<ControlledCombobox />);
+
+    const input = screen.getByRole('combobox');
+    await userEvent.click(input);
+    await userEvent.click(screen.getByRole('option', { name: 'Default' }));
+    expect(screen.queryByDisplayValue('Default')).toBeInTheDocument();
+
+    await userEvent.click(input);
+
+    expect(screen.getByRole('option', { name: 'Default' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  describe('size support', () => {
+    it('should require minWidth to be set with auto width', () => {
+      // @ts-expect-error
+      render(<Combobox options={options} value={null} onChange={onChangeHandler} width="auto" />);
+    });
+
+    it('should change width when typing things with auto width', async () => {
+      render(<Combobox options={options} value={null} onChange={onChangeHandler} width="auto" minWidth={2} />);
+
+      const input = screen.getByRole('combobox');
+      const inputWrapper = screen.getByTestId('input-wrapper');
+      const initialWidth = getComputedStyle(inputWrapper).width;
+
+      fireEvent.change(input, { target: { value: 'very very long value' } });
+
+      const newWidth = getComputedStyle(inputWrapper).width;
+
+      expect(initialWidth).not.toBe(newWidth);
+    });
+
+    it('should not change width when typing things with fixed width', async () => {
+      render(<Combobox options={options} value={null} onChange={onChangeHandler} width={2} />);
+      const input = screen.getByRole('combobox');
+
+      const inputWrapper = screen.getByTestId('input-wrapper');
+      const initialWidth = getComputedStyle(inputWrapper).width;
+
+      fireEvent.change(input, { target: { value: 'very very long value' } });
+
+      const newWidth = getComputedStyle(inputWrapper).width;
+
+      expect(initialWidth).toBe(newWidth);
+    });
+  });
+
   describe('with a value already selected', () => {
     it('shows an empty text input when opening the menu', async () => {
       const selectedValue = options[0].value;
@@ -159,14 +239,26 @@ describe('Combobox', () => {
       const onChangeHandler = jest.fn();
       render(<Combobox options={options} value={null} onChange={onChangeHandler} createCustomValue />);
       const input = screen.getByRole('combobox');
-      await userEvent.type(input, 'custom value');
+      await userEvent.type(input, 'Use custom value');
       await userEvent.keyboard('{Enter}');
 
-      expect(screen.getByDisplayValue('custom value')).toBeInTheDocument();
-      expect(onChangeHandler).toHaveBeenCalledWith(expect.objectContaining({ value: 'custom value' }));
+      expect(screen.getByDisplayValue('Use custom value')).toBeInTheDocument();
+      expect(onChangeHandler).toHaveBeenCalledWith(expect.objectContaining({ description: 'Use custom value' }));
     });
 
-    it('should proivde custom string when all options are numbers', async () => {
+    it('should not allow creating a custom value when it is an existing value', async () => {
+      const onChangeHandler = jest.fn();
+      render(<Combobox options={options} value={null} onChange={onChangeHandler} createCustomValue />);
+      const input = screen.getByRole('combobox');
+      await userEvent.type(input, '4');
+      await userEvent.keyboard('{Enter}');
+      expect(screen.queryByDisplayValue('Use custom value')).not.toBeInTheDocument();
+      expect(screen.getByDisplayValue('Option 4')).toBeInTheDocument();
+      expect(onChangeHandler).toHaveBeenCalledWith(expect.objectContaining({ value: '4' }));
+      expect(onChangeHandler).not.toHaveBeenCalledWith(expect.objectContaining({ description: 'Use custom value' }));
+    });
+
+    it('should provide custom string when all options are numbers', async () => {
       const options = [
         { label: '1', value: 1 },
         { label: '2', value: 2 },
@@ -178,10 +270,10 @@ describe('Combobox', () => {
       render(<Combobox options={options} value={null} onChange={onChangeHandler} createCustomValue />);
       const input = screen.getByRole('combobox');
 
-      await userEvent.type(input, 'custom value');
+      await userEvent.type(input, 'Use custom value');
       await userEvent.keyboard('{Enter}');
 
-      expect(screen.getByDisplayValue('custom value')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('Use custom value')).toBeInTheDocument();
       expect(typeof onChangeHandler.mock.calls[0][0].value === 'string').toBeTruthy();
       expect(typeof onChangeHandler.mock.calls[0][0].value === 'number').toBeFalsy();
 
@@ -303,7 +395,9 @@ describe('Combobox', () => {
       const input = screen.getByRole('combobox');
       await user.click(input);
 
-      expect(asyncSpy).toHaveBeenCalledTimes(1); // Called on open
+      expect(asyncSpy).not.toHaveBeenCalledTimes(1); // Not called yet
+      act(() => jest.advanceTimersByTime(200)); // Add the debounce time
+      expect(asyncSpy).toHaveBeenCalledTimes(1); // Then check if called on open
       asyncSpy.mockClear();
 
       await user.keyboard('a');
@@ -333,15 +427,18 @@ describe('Combobox', () => {
         jest.advanceTimersByTime(500); // Custom value while typing
       });
 
-      const customItem = screen.queryByRole('option', { name: 'fir Create custom value' });
-
+      const customItem = screen.getByRole('option');
+      const customValue = customItem.getElementsByTagName('span')[0].textContent;
+      const customDescription = customItem.getElementsByTagName('span')[1].textContent;
       expect(customItem).toBeInTheDocument();
+      expect(customValue).toBe('fir');
+      expect(customDescription).toBe('Use custom value');
     });
 
     it('should display message when there is an error loading async options', async () => {
-      const asyncOptions = jest.fn(() => {
-        throw new Error('Could not retrieve options');
-      });
+      const fetchData = jest.fn();
+      const asyncOptions = fetchData.mockRejectedValue(new Error('Could not retrieve options'));
+      const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation();
 
       render(<Combobox options={asyncOptions} value={null} onChange={onChangeHandler} />);
 
@@ -350,12 +447,15 @@ describe('Combobox', () => {
       await user.type(input, 'test');
 
       await act(async () => {
-        jest.advanceTimersToNextTimer();
+        jest.advanceTimersByTimeAsync(500);
       });
+      expect(asyncOptions).rejects.toThrow('Could not retrieve options');
+      await waitFor(() => expect(consoleErrorSpy).toHaveBeenCalled());
 
       const emptyMessage = screen.queryByText('An error occurred while loading options.');
-
       expect(emptyMessage).toBeInTheDocument();
+
+      asyncOptions.mockClear();
     });
 
     describe('with a value already selected', () => {
@@ -408,6 +508,44 @@ describe('Combobox', () => {
         expect(onChangeHandler).not.toHaveBeenCalled();
         expect(input).toHaveValue('Option 1');
       });
+    });
+  });
+
+  describe('with RTL selectors', () => {
+    it('can be selected by label with HTML <label>', () => {
+      render(
+        <>
+          <label htmlFor="country-dropdown">Country</label>
+          <Combobox id="country-dropdown" options={options} value={null} onChange={onChangeHandler} />
+        </>
+      );
+
+      const inputByLabelText = screen.getByLabelText('Country');
+      expect(inputByLabelText).toBeInTheDocument();
+
+      const inputByRole = screen.getByRole('combobox', { name: 'Country' });
+      expect(inputByRole).toBeInTheDocument();
+    });
+
+    it('can be selected by label with @grafana/ui <Field>', () => {
+      render(
+        <Field label="Country">
+          <Combobox id="country-dropdown" options={options} value={null} onChange={onChangeHandler} />
+        </Field>
+      );
+
+      const inputByLabelText = screen.getByLabelText('Country');
+      expect(inputByLabelText).toBeInTheDocument();
+
+      const inputByRole = screen.getByRole('combobox', { name: 'Country' });
+      expect(inputByRole).toBeInTheDocument();
+    });
+
+    it('can be selected by placeholder', () => {
+      render(<Combobox placeholder="Country" options={options} value={null} onChange={onChangeHandler} />);
+
+      const inputByPlaceholderText = screen.getByPlaceholderText('Country');
+      expect(inputByPlaceholderText).toBeInTheDocument();
     });
   });
 });

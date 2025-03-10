@@ -7,7 +7,7 @@ export const SPANISH_SPAIN = 'es-ES';
 export const GERMAN_GERMANY = 'de-DE';
 export const BRAZILIAN_PORTUGUESE = 'pt-BR';
 export const CHINESE_SIMPLIFIED = 'zh-Hans';
-export const PSEUDO_LOCALE = 'pseudo-LOCALE';
+export const PSEUDO_LOCALE = 'pseudo';
 
 export const DEFAULT_LANGUAGE = ENGLISH_US;
 
@@ -79,7 +79,9 @@ if (process.env.NODE_ENV === 'development') {
     code: PSEUDO_LOCALE,
     name: 'Pseudo-locale',
     loader: {
-      grafana: () => import('../../../locales/pseudo-LOCALE/grafana.json'),
+      // Load the English locale as the pseudo-locale,
+      // as it will be post-processed by i18next-pseudo library
+      grafana: () => import('../../../locales/en-US/grafana.json'),
     },
   });
 }

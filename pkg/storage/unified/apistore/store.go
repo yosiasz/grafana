@@ -6,6 +6,7 @@
 package apistore
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"strconv"
 	"time"
 
+	"golang.org/x/exp/rand"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,6 +28,8 @@ import (
 	"k8s.io/apiserver/pkg/storage/storagebackend"
 	"k8s.io/apiserver/pkg/storage/storagebackend/factory"
 	"k8s.io/client-go/tools/cache"
+
+	"github.com/bwmarrin/snowflake"
 
 	"github.com/grafana/grafana/pkg/apimachinery/utils"
 	grafanaregistry "github.com/grafana/grafana/pkg/apiserver/registry/generic"
@@ -44,6 +48,8 @@ var _ storage.Interface = (*Storage)(nil)
 // Optional settings that apply to a single resource
 type StorageOptions struct {
 	LargeObjectSupport LargeObjectSupport
+
+	RequireDeprecatedInternalID bool
 }
 
 // Storage implements storage.Interface and storage resources as JSON files on disk.
@@ -57,8 +63,9 @@ type Storage struct {
 	trigger      storage.IndexerFuncs
 	indexers     *cache.Indexers
 
-	store  resource.ResourceClient
-	getKey func(string) (*resource.ResourceKey, error)
+	store     resource.ResourceClient
+	getKey    func(string) (*resource.ResourceKey, error)
+	snowflake *snowflake.Node // used to enforce internal ids
 
 	versioner storage.Versioner
 
@@ -103,6 +110,14 @@ func NewStorage(
 		opts: opts,
 	}
 
+	if opts.RequireDeprecatedInternalID {
+		node, err := snowflake.NewNode(rand.Int63n(1024))
+		if err != nil {
+			return nil, nil, err
+		}
+		s.snowflake = node
+	}
+
 	// The key parsing callback allows us to support the hardcoded paths from upstream tests
 	if s.getKey == nil {
 		s.getKey = func(key string) (*resource.ResourceKey, error) {
@@ -132,6 +147,11 @@ func (s *Storage) Versioner() storage.Versioner {
 	return s.versioner
 }
 
+func (s *Storage) convertToObject(data []byte, obj runtime.Object) (runtime.Object, error) {
+	obj, _, err := s.codec.Decode(data, nil, obj)
+	return obj, err
+}
+
 // Create adds a new object at a key unless it already exists. 'ttl' is time-to-live
 // in seconds (0 means forever). If no error is returned and out is not nil, out will be
 // set to the read value from database.
@@ -148,7 +168,7 @@ func (s *Storage) Create(ctx context.Context, key string, obj runtime.Object, ou
 	}
 	rsp, err := s.store.Create(ctx, req)
 	if err != nil {
-		return err
+		return resource.GetError(resource.AsErrorResult(err))
 	}
 	if rsp.Error != nil {
 		if rsp.Error.Code == http.StatusConflict {
@@ -157,7 +177,7 @@ func (s *Storage) Create(ctx context.Context, key string, obj runtime.Object, ou
 		return resource.GetError(rsp.Error)
 	}
 
-	if err := copyModifiedObjectToDestination(obj, out); err != nil {
+	if _, err := s.convertToObject(req.Value, out); err != nil {
 		return err
 	}
 
@@ -170,7 +190,7 @@ func (s *Storage) Create(ctx context.Context, key string, obj runtime.Object, ou
 	// set a timer to delete the file after ttl seconds
 	if ttl > 0 {
 		time.AfterFunc(time.Second*time.Duration(ttl), func() {
-			if err := s.Delete(ctx, key, s.newFunc(), &storage.Preconditions{}, func(ctx context.Context, obj runtime.Object) error { return nil }, obj); err != nil {
+			if err := s.Delete(ctx, key, s.newFunc(), &storage.Preconditions{}, func(ctx context.Context, obj runtime.Object) error { return nil }, obj, storage.DeleteOptions{}); err != nil {
 				panic(err)
 			}
 		})
@@ -191,6 +211,7 @@ func (s *Storage) Delete(
 	preconditions *storage.Preconditions,
 	validateDeletion storage.ValidateObjectFunc,
 	_ runtime.Object,
+	opts storage.DeleteOptions,
 ) error {
 	if err := s.Get(ctx, key, storage.GetOptions{}, out); err != nil {
 		return err
@@ -218,13 +239,14 @@ func (s *Storage) Delete(
 		}
 	}
 
-	// ?? this was after delete before
-	if err := validateDeletion(ctx, out); err != nil {
-		return err
+	if validateDeletion != nil {
+		if err := validateDeletion(ctx, out); err != nil {
+			return err
+		}
 	}
 	rsp, err := s.store.Delete(ctx, cmd)
 	if err != nil {
-		return err
+		return resource.GetError(resource.AsErrorResult(err))
 	}
 	if rsp.Error != nil {
 		return resource.GetError(rsp.Error)
@@ -264,7 +286,8 @@ func (s *Storage) Watch(ctx context.Context, key string, opts storage.ListOption
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) {
 			return watch.NewEmptyWatch(), nil
 		}
-		return nil, err
+
+		return nil, resource.GetError(resource.AsErrorResult(err))
 	}
 
 	reporter := apierrors.NewClientErrorReporter(500, "WATCH", "")
@@ -298,7 +321,7 @@ func (s *Storage) Get(ctx context.Context, key string, opts storage.GetOptions, 
 
 	rsp, err := s.store.Read(ctx, req)
 	if err != nil {
-		return err
+		return resource.GetError(resource.AsErrorResult(err))
 	}
 	if rsp.Error != nil {
 		if rsp.Error.Code == http.StatusNotFound {
@@ -310,7 +333,7 @@ func (s *Storage) Get(ctx context.Context, key string, opts storage.GetOptions, 
 		return resource.GetError(rsp.Error)
 	}
 
-	_, _, err = s.codec.Decode(rsp.Value, nil, objPtr)
+	_, err = s.convertToObject(rsp.Value, objPtr)
 	if err != nil {
 		return err
 	}
@@ -336,7 +359,7 @@ func (s *Storage) GetList(ctx context.Context, key string, opts storage.ListOpti
 
 	rsp, err := s.store.List(ctx, req)
 	if err != nil {
-		return err
+		return resource.GetError(resource.AsErrorResult(err))
 	}
 	if rsp.Error != nil {
 		return resource.GetError(rsp.Error)
@@ -360,7 +383,7 @@ func (s *Storage) GetList(ctx context.Context, key string, opts storage.ListOpti
 	}
 
 	for _, item := range rsp.Items {
-		obj, _, err := s.codec.Decode(item.Value, nil, s.newFunc())
+		obj, err := s.convertToObject(item.Value, s.newFunc())
 		if err != nil {
 			return err
 		}
@@ -444,7 +467,7 @@ func (s *Storage) GuaranteedUpdate(
 		// Read the latest value
 		rsp, err := s.store.Read(ctx, &resource.ReadRequest{Key: req.Key})
 		if err != nil {
-			return err
+			return resource.GetError(resource.AsErrorResult(err))
 		}
 
 		if rsp.Error != nil {
@@ -461,7 +484,7 @@ func (s *Storage) GuaranteedUpdate(
 		existingObj = s.newFunc()
 		if len(rsp.Value) > 0 {
 			created = false
-			_, _, err = s.codec.Decode(rsp.Value, nil, existingObj)
+			_, err = s.convertToObject(rsp.Value, existingObj)
 			if err != nil {
 				return err
 			}
@@ -512,15 +535,22 @@ func (s *Storage) GuaranteedUpdate(
 	}
 
 	if unchanged {
-		if err := copyModifiedObjectToDestination(updatedObj, destination); err != nil {
+		var buf bytes.Buffer
+		if err = s.codec.Encode(updatedObj, &buf); err != nil {
+			return err
+		}
+		if _, err := s.convertToObject(buf.Bytes(), destination); err != nil {
 			return err
 		}
 		return nil
 	}
 
-	rv := int64(0)
+	var (
+		value []byte
+		rv    int64
+	)
 	if created {
-		value, err := s.prepareObjectForStorage(ctx, updatedObj)
+		value, err = s.prepareObjectForStorage(ctx, updatedObj)
 		if err != nil {
 			return err
 		}
@@ -529,20 +559,21 @@ func (s *Storage) GuaranteedUpdate(
 			Value: value,
 		})
 		if err != nil {
-			return err
+			return resource.GetError(resource.AsErrorResult(err))
 		}
 		if rsp2.Error != nil {
 			return resource.GetError(rsp2.Error)
 		}
 		rv = rsp2.ResourceVersion
 	} else {
-		req.Value, err = s.prepareObjectForUpdate(ctx, updatedObj, existingObj)
+		value, err = s.prepareObjectForUpdate(ctx, updatedObj, existingObj)
 		if err != nil {
 			return err
 		}
+		req.Value = value
 		rsp2, err := s.store.Update(ctx, req)
 		if err != nil {
-			return err
+			return resource.GetError(resource.AsErrorResult(err))
 		}
 		if rsp2.Error != nil {
 			return resource.GetError(rsp2.Error)
@@ -550,11 +581,11 @@ func (s *Storage) GuaranteedUpdate(
 		rv = rsp2.ResourceVersion
 	}
 
-	if err := s.versioner.UpdateObject(updatedObj, uint64(rv)); err != nil {
+	if _, err := s.convertToObject(value, destination); err != nil {
 		return err
 	}
 
-	if err := copyModifiedObjectToDestination(updatedObj, destination); err != nil {
+	if err := s.versioner.UpdateObject(destination, uint64(rv)); err != nil {
 		return err
 	}
 
@@ -606,18 +637,5 @@ func (s *Storage) validateMinimumResourceVersion(minimumResourceVersion string, 
 	if minimumRV > actualRevision {
 		return storage.NewTooLargeResourceVersionError(minimumRV, actualRevision, 0)
 	}
-	return nil
-}
-
-func copyModifiedObjectToDestination(updatedObj runtime.Object, destination runtime.Object) error {
-	u, err := conversion.EnforcePtr(updatedObj)
-	if err != nil {
-		return fmt.Errorf("unable to enforce updated object pointer: %w", err)
-	}
-	d, err := conversion.EnforcePtr(destination)
-	if err != nil {
-		return fmt.Errorf("unable to enforce destination pointer: %w", err)
-	}
-	d.Set(u)
 	return nil
 }

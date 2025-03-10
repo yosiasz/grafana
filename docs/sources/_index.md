@@ -4,7 +4,9 @@ aliases:
   - /docs/grafana/v3.1/
   - guides/reference/admin/
 cascade:
+  LOKI_VERSION: latest
   TEMPO_VERSION: latest
+  ONCALL_VERSION: latest
   PYROSCOPE_VERSION: latest
 description: Find answers to your technical questions and learn how to use Grafana OSS and Enterprise products.
 keywords:
@@ -45,7 +47,7 @@ cards:
       height: 24
     - title: Dashboards
       href: ./dashboards/
-      description: Query, transform, visualize, and understand your data no matter where it’s stored.
+      description: Query, transform, visualize, and understand your data no matter where it's stored.
       height: 24
     - title: Panels and Visualizations
       href: ./panels-visualizations/

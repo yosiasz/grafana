@@ -56,17 +56,17 @@ Use app plugins when you want an out-of-the-box monitoring experience.
 
 ### Managing access for app plugins
 
-Customize access to app plugins with [RBAC]({{< relref "../roles-and-permissions/access-control/rbac-for-app-plugins" >}}).
+Customize access to app plugins with [RBAC](../roles-and-permissions/access-control/rbac-for-app-plugins/).
 
 By default, the Viewer, Editor and Admin roles have access to all app plugins that their Organization role allows them to access. Access is granted by the `fixed:plugins.app:reader` role.
 
 {{% admonition type="note" %}}
-To prevent users from seeing an app plugin, refer to [these permissions scenarios]({{< relref "../roles-and-permissions/access-control/plan-rbac-rollout-strategy#prevent-viewers-from-accessing-an-app-plugin" >}}).
+To prevent users from seeing an app plugin, refer to [these permissions scenarios](../roles-and-permissions/access-control/plan-rbac-rollout-strategy/#prevent-viewers-from-accessing-an-app-plugin).
 {{% /admonition %}}
 
 ## Plugin catalog
 
-The Grafana plugin catalog allows you to browse and manage plugins from within Grafana. Only Grafana server administrators and Organization administrators can access and use the plugin catalog. For more information about Grafana roles and permissions, refer to [Roles and permissions]({{< relref "../administration/roles-and-permissions" >}}).
+The Grafana plugin catalog allows you to browse and manage plugins from within Grafana. Only Grafana server administrators and Organization administrators can access and use the plugin catalog. For more information about Grafana roles and permissions, refer to [Roles and permissions](../roles-and-permissions/).
 
 The following access rules apply depending on the user role:
 
@@ -88,7 +88,7 @@ The Grafana plugin catalog is designed to work with a single Grafana server inst
 _Video shows the Plugin catalog in a previous version of Grafana._
 
 {{% admonition type="note" %}}
-If required, the Grafana plugin catalog can be disabled using the `plugin_admin_enabled` flag in the [configuration]({{< relref "../../setup-grafana/configure-grafana/#plugin_admin_enabled" >}}) file.
+If required, the Grafana plugin catalog can be disabled using the `plugin_admin_enabled` flag in the [configuration](../../setup-grafana/configure-grafana/#plugin_admin_enabled) file.
 {{% /admonition %}}
 
 <a id="#plugin-catalog-entry"></a>
@@ -103,53 +103,53 @@ To browse for available plugins:
 
 ### Install a plugin
 
-To install a plugin:
+The most common way to install a plugin is through the Grafana UI, but alternative methods are also available.
 
 1. In Grafana, click **Administration > Plugins and data > Plugins** in the side navigation menu to view all plugins.
 1. Browse and find a plugin.
 1. Click the plugin's logo.
 1. Click **Install**.
 
-When the update is complete, you'll see a confirmation message that the installation was successful.
+There are also additional ways to install plugins depending on your setup.
 
-### Update a plugin
+#### Install a plugin using Grafana CLI
 
-To update a plugin:
+Grafana CLI allows you to install, upgrade, and manage your Grafana plugins using a command line. For more information about Grafana CLI plugin commands, refer to [Plugin commands](../../cli/#plugins-commands).
 
-1. In Grafana, click **Administration > Plugins and data > Plugins** in the side navigation menu to view all plugins.
-1. Click the **Installed** filter to show only installed plugins.
-1. Click the plugin's logo.
-1. Click **Update**.
+#### Install a plugin from a ZIP file
 
-When the update is complete, you'll see a confirmation message that the update was successful.
+This method is typically used for plugins not available in the Plugin Catalog or in environments without internet access.
 
-### Uninstall a plugin
+Download the archive containing the plugin assets, and install it by extracting the archive into the plugin directory. For example:
 
-To uninstall a plugin:
+```bash
+unzip my-plugin-0.2.0.zip -d YOUR_PLUGIN_DIR/my-plugin
+```
 
-1. In Grafana, click **Administration > Plugins and data > Plugins** in the side navigation menu to view all plugins.
-1. Click the plugin's logo.
-1. Click the **Installed** filter to show only installed plugins.
-1. Click **Uninstall**.
+The path to the plugin directory is defined in the configuration file. For more information, refer to [Configuration](../../setup-grafana/configure-grafana/#plugins).
 
-When the update is complete, you'll see a confirmation message that the uninstall was successful.
+#### Install a plugin using Grafana configuration
 
-## Install Grafana plugins
+{{% admonition type="note" %}}
+This feature requires Grafana 11.5.0 or later.
+{{% /admonition %}}
 
-Grafana supports data source, panel, and app plugins.
+You can install plugins by adding the plugin ID to the `plugins.preinstall` section in the Grafana configuration file. This prevents the plugin from being accidentally uninstalled and can be auto-updated. For more information, refer to [Configuration](../../setup-grafana/configure-grafana/#plugins).
 
-1. In a web browser, navigate to the [Grafana plugin catalog](https://grafana.com/plugins) and find a plugin that you want to install.
-1. Click the plugin, and then click the **Installation** tab.
+#### Install a plugin in air-gapped environment
 
-### Install plugin on Grafana Cloud
+Plugin installation usually requires an internet connection. You can check which endpoints are used during the installation on your instance and add them to your instance’s allowlist.
 
-On the **Installation tab**, in the **For** field, click the name of the Grafana instance on which you want to install the plugin.
+If this is not possible you can go via installing a plugin using [Grafana CLI](#install-a-plugin-using-grafana-cli) or as a [ZIP file](#install-a-plugin-from-a-zip-file).
 
-Grafana Cloud handles the plugin installation automatically.
+You can fetch any plugin from Grafana.com API following the download link referenced in the API.
+Here is an example based on `grafana-lokiexplore-app` plugins.
 
-If you're logged in to Grafana Cloud when you add a plugin, log out and then log back in again to use the new plugin.
+1. Open `https://grafana.com/api/plugins/grafana-lokiexplore-app` and look for `links` section
+1. Find a `download` url which looks something like `https://grafana.com/api/plugins/grafana-lokiexplore-app/versions/1.0.2/download`
+1. Use this URL to download the plugin ZIP file, which you can then install as described above.
 
-### Install plugins using the Grafana Helm chart
+#### Install plugins using the Grafana Helm chart
 
 With the Grafana Helm chart, add the plugins you want to install as a list using the `plugins` field in the your values file. For more information about the configuration, refer to [the Helm chart configuration reference](https://github.com/grafana/helm-charts/tree/main/charts/grafana#configuration).
 
@@ -162,21 +162,29 @@ plugins:
   - redis-datasource
 ```
 
-### Install plugin on local Grafana
+When the update is complete, a confirmation message will indicate the installation was successful.
 
-Follow the instructions on the **Install** tab. You can either install the plugin with a Grafana CLI command or by downloading and uncompressing a zip file into the Grafana plugins directory. We recommend using Grafana CLI in most instances. The zip option is available if your Grafana server doesn't have access to the internet.
+### Update a plugin
 
-For more information about Grafana CLI plugin commands, refer to [Plugin commands]({{< relref "../../cli/#plugins-commands" >}}).
+To update a plugin:
 
-#### Install a packaged plugin
+1. In Grafana, click **Administration > Plugins and data > Plugins** in the side navigation menu to view all plugins.
+1. Click the **Installed** filter to show only installed plugins.
+1. Click the plugin's logo.
+1. Click **Update**.
 
-After the user has downloaded the archive containing the plugin assets, they can install it by extracting the archive into their plugin directory. For example:
+When the update is complete, a confirmation message will indicate the installation was successful.
 
-```bash
-unzip my-plugin-0.2.0.zip -d YOUR_PLUGIN_DIR/my-plugin
-```
+### Uninstall a plugin
 
-The path to the plugin directory is defined in the configuration file. For more information, refer to [Configuration]({{< relref "../../setup-grafana/configure-grafana/#plugins" >}}).
+To uninstall a plugin:
+
+1. In Grafana, click **Administration > Plugins and data > Plugins** in the side navigation menu to view all plugins.
+1. Click the plugin's logo.
+1. Click the **Installed** filter to show only installed plugins.
+1. Click **Uninstall**.
+
+When the update is complete, a confirmation message will indicate the installation was successful.
 
 ## Plugin signatures
 
@@ -216,7 +224,7 @@ All plugins are signed under a _signature level_. The signature level determines
 Unsigned plugins are not supported in Grafana Cloud.
 {{% /admonition %}}
 
-We strongly recommend that you don't run unsigned plugins in your Grafana instance. However, if you're aware of the risks and you still want to load an unsigned plugin, refer to [Configuration]({{< relref "../../setup-grafana/configure-grafana/#allow_loading_unsigned_plugins" >}}).
+We strongly recommend that you don't run unsigned plugins in your Grafana instance. However, if you're aware of the risks and you still want to load an unsigned plugin, refer to [Configuration](../../setup-grafana/configure-grafana/#allow_loading_unsigned_plugins).
 
 If you've allowed loading of an unsigned plugin, then Grafana writes a warning message to the server log:
 
@@ -227,6 +235,32 @@ WARN[06-01|16:45:59] Running an unsigned plugin   pluginID=<plugin id>
 {{% admonition type="note" %}}
 If you're developing a plugin, then you can enable development mode to allow all unsigned plugins.
 {{% /admonition %}}
+
+## Integrate plugins
+
+You can configure your Grafana instance to let the frontends of installed plugins directly communicate locally with the backends of other installed plugins. By default, you can only communicate with plugin backends remotely. You can use this configuration to, for example, enable a [canvas panel](https://grafana.com/docs/grafana/latest/panels-visualizations/visualizations/canvas/) to call an application resource API that is permitted by the `actions_allow_post_url` option.
+
+To enable backend communication between plugins:
+
+1. Set the plugins you want to communicate with. In your configuration file (`grafana.ini` or `custom.ini` depending on your operating system) remove the semicolon to enable and then set the following configuration option:
+
+   ```
+   actions_allow_post_url=
+   ```
+
+   This is a comma-separated list that uses glob matching.
+
+   - To allow access to all plugins that have a backend:
+
+     ```
+     actions_allow_post_url=/api/plugins/*
+     ```
+
+   - To access to the backend of only one plugin:
+
+     ```
+     actions_allow_post_url=/api/plugins/<GRAFANA_SPECIAL_APP>
+     ```
 
 ## Plugin Frontend Sandbox
 
@@ -248,7 +282,7 @@ Plugins running inside the Frontend Sandbox should continue to work normally wit
 
 The Frontend Sandbox feature is currently behind the `pluginsFrontendSandbox` feature flag. To enable it, you'll need to:
 
-1. Enable the feature flag in your Grafana configuration. For more information about enabling feature flags, refer to [Configure feature toggles](/setup-grafana/configure-grafana/feature-toggles/).
+1. Enable the feature flag in your Grafana configuration. For more information about enabling feature flags, refer to [Configure feature toggles](/docs/grafana/<GRAFANA_VERSION>/setup-grafana/configure-grafana/feature-toggles/).
 
 2. For self-hosted Grafana installations, add the plugin IDs you want to sandbox in the `security` section using the `enable_frontend_sandbox_for_plugins` configuration option.
 
@@ -260,7 +294,7 @@ Enabling the Frontend Sandbox might impact the performance of certain plugins. O
 
 ### Compatibility
 
-The Frontend Sandbox is available in public preview in Grafana >=11.4. It is compatible with all types of plugins including app plugins, panel plugins, and data source plugins. Angular-based plugins are not supported. Plugins developed and signed by Grafana Labs are excluded and cannot be sandboxed.
+The Frontend Sandbox is available in public preview in Grafana >=11.5. It is compatible with all types of plugins including app plugins, panel plugins, and data source plugins. Angular-based plugins are not supported. Plugins developed and signed by Grafana Labs are excluded and cannot be sandboxed.
 
 ### When to Use Frontend Sandbox
 

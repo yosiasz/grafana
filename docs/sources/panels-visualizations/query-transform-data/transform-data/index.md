@@ -104,6 +104,16 @@ When there are multiple transformations, Grafana applies them in the order they 
 
 The order in which Grafana applies transformations directly impacts the results. For example, if you use a Reduce transformation to condense all the results of one column into a single value, then you can only apply transformations to that single value.
 
+## Dashboard variables in transformations
+
+All text input fields in transformations accept [variable syntax](ref:dashboard-variable):
+
+{{< figure src="/media/docs/grafana/panels-visualizations/screenshot-transformation-variables-v11.6.png" alt="Transformation with a mock variable in a text field" >}}
+
+When you use dashboard variables in transformations, the variables are automatically interpolated before the transformations are applied to the data.
+
+For an example, refer to [Use a dashboard variable](#use-a-dashboard-variable) in the **Filter fields by name** transformation.
+
 ## Add a transformation function to data
 
 The following steps guide you in adding a transformation to data. This documentation does not include steps for each type of transformation. For a complete list of transformations, refer to [Transformation functions](#transformation-functions).
@@ -286,6 +296,8 @@ In the field mapping specify:
 
 Grafana builds value mappings from your query result and applies them to the real data query results. You should see values being mapped and colored according to the config query results.
 
+> **Note:** When you use this transformation for thresholds, the visualization continues to use the panel's base threshold.
+
 ### Convert field type
 
 Use this transformation to modify the field type of a specified field.
@@ -338,6 +350,8 @@ Use this transformation to select a source of data and extract content from it i
 - **Format** - Choose one of the following:
   - **JSON** - Parse JSON content from the source.
   - **Key+value pairs** - Parse content in the format 'a=b' or 'c:d' from the source.
+  - **RegExp** - Parse content using a regular expression with [named capturing group(s)](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Regular_expressions/Named_capturing_group) like `/(?<NewField>.*)/`.
+    {{< figure src="/media/docs/grafana/panels-visualizations/screenshot-regexp-detail-v11.3-2.png" class="docs-image--no-shadow" max-width= "1100px" alt="Example of a regular expression" >}}
   - **Auto** - Discover fields automatically.
 - **Replace All Fields** - (Optional) Select this option to hide all other fields and display only your calculated field in the visualization.
 - **Keep Time** - (Optional) Available only if **Replace All Fields** is true. Keeps the time field in the output.

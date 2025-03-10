@@ -6,18 +6,21 @@ import (
 
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 
-	"github.com/grafana/authlib/authz"
+	authlib "github.com/grafana/authlib/types"
 
 	"github.com/grafana/grafana/pkg/services/authz/zanzana/common"
 )
 
 const (
-	TypeUser      = common.TypeUser
-	TypeTeam      = common.TypeTeam
-	TypeRole      = common.TypeRole
-	TypeFolder    = common.TypeFolder
-	TypeResource  = common.TypeResource
-	TypeNamespace = common.TypeNamespace
+	TypeUser           = common.TypeUser
+	TypeServiceAccount = common.TypeServiceAccount
+	TypeRenderService  = common.TypeRenderService
+	TypeAnonymous      = common.TypeAnonymous
+	TypeTeam           = common.TypeTeam
+	TypeRole           = common.TypeRole
+	TypeFolder         = common.TypeFolder
+	TypeResource       = common.TypeResource
+	TypeNamespace      = common.TypeGroupResouce
 )
 
 const (
@@ -30,60 +33,30 @@ const (
 	RelationSetEdit  = common.RelationSetEdit
 	RelationSetAdmin = common.RelationSetAdmin
 
-	RelationRead             = common.RelationRead
-	RelationWrite            = common.RelationWrite
-	RelationCreate           = common.RelationCreate
-	RelationDelete           = common.RelationDelete
-	RelationPermissionsRead  = common.RelationPermissionsRead
-	RelationPermissionsWrite = common.RelationPermissionsWrite
+	RelationGet    = common.RelationGet
+	RelationUpdate = common.RelationUpdate
+	RelationCreate = common.RelationCreate
+	RelationDelete = common.RelationDelete
 
 	RelationFolderResourceSetView  = common.RelationFolderResourceSetView
 	RelationFolderResourceSetEdit  = common.RelationFolderResourceSetEdit
 	RelationFolderResourceSetAdmin = common.RelationFolderResourceSetAdmin
 
-	RelationFolderResourceRead             = common.RelationFolderResourceRead
-	RelationFolderResourceWrite            = common.RelationFolderResourceWrite
-	RelationFolderResourceCreate           = common.RelationFolderResourceCreate
-	RelationFolderResourceDelete           = common.RelationFolderResourceDelete
-	RelationFolderResourcePermissionsRead  = common.RelationFolderResourcePermissionsRead
-	RelationFolderResourcePermissionsWrite = common.RelationFolderResourcePermissionsWrite
+	RelationFolderResourceRead   = common.RelationFolderResourceGet
+	RelationFolderResourceWrite  = common.RelationFolderResourceUpdate
+	RelationFolderResourceCreate = common.RelationFolderResourceCreate
+	RelationFolderResourceDelete = common.RelationFolderResourceDelete
 )
 
-var ResourceRelations = []string{
-	RelationRead,
-	RelationWrite,
-	RelationCreate,
-	RelationDelete,
-	RelationPermissionsRead,
-	RelationPermissionsWrite,
-}
-
-var FolderRelations = append(
-	ResourceRelations,
-	RelationFolderResourceRead,
-	RelationFolderResourceWrite,
-	RelationFolderResourceCreate,
-	RelationFolderResourceDelete,
-	RelationFolderResourcePermissionsRead,
-	RelationFolderResourcePermissionsWrite,
+var (
+	RelationsFolder         = common.RelationsFolder
+	RelationsResouce        = common.RelationsResource
+	RelationsFolderResource = common.RelationsFolderResource
 )
 
 const (
 	KindDashboards string = "dashboards"
 	KindFolders    string = "folders"
-)
-
-const (
-	RoleGrafanaAdmin = "Grafana Admin"
-	RoleAdmin        = "Admin"
-	RoleEditor       = "Editor"
-	RoleViewer       = "Viewer"
-	RoleNone         = "None"
-
-	BasicRolePrefix    = "basic:"
-	BasicRoleUIDPrefix = "basic_"
-
-	GlobalOrgID = 0
 )
 
 var (
@@ -98,11 +71,11 @@ var (
 	ToOpenFGATupleKeyWithoutCondition = common.ToOpenFGATupleKeyWithoutCondition
 )
 
-// NewTupleEntry constructs new openfga entry type:id[#relation].
-// Relation allows to specify group of users (subjects) related to type:id
+// NewTupleEntry constructs new openfga entry type:name[#relation].
+// Relation allows to specify group of users (subjects) related to type:name
 // (for example, team:devs#member refers to users which are members of team devs)
-func NewTupleEntry(objectType, id, relation string) string {
-	obj := fmt.Sprintf("%s:%s", objectType, id)
+func NewTupleEntry(objectType, name, relation string) string {
+	obj := fmt.Sprintf("%s:%s", objectType, name)
 	if relation != "" {
 		obj = fmt.Sprintf("%s#%s", obj, relation)
 	}
@@ -121,13 +94,17 @@ func TranslateToResourceTuple(subject string, action, kind, name string) (*openf
 		return nil, false
 	}
 
+	if name == "*" {
+		return common.NewGroupResourceTuple(subject, m.relation, translation.group, translation.resource, m.subresource), true
+	}
+
 	if translation.typ == TypeResource {
-		return common.NewResourceTuple(subject, m.relation, translation.group, translation.resource, name), true
+		return common.NewResourceTuple(subject, m.relation, translation.group, translation.resource, m.subresource, name), true
 	}
 
 	if translation.typ == TypeFolder {
 		if m.group != "" && m.resource != "" {
-			return common.NewFolderResourceTuple(subject, m.relation, m.group, m.resource, name), true
+			return common.NewFolderResourceTuple(subject, m.relation, m.group, m.resource, m.subresource, name), true
 		}
 
 		return common.NewFolderTuple(subject, m.relation, name), true
@@ -146,7 +123,7 @@ func MergeFolderResourceTuples(a, b *openfgav1.TupleKey) {
 	va.GetListValue().Values = append(va.GetListValue().Values, vb.GetListValue().Values...)
 }
 
-func TranslateToCheckRequest(namespace, action, kind, folder, name string) (*authz.CheckRequest, bool) {
+func TranslateToCheckRequest(namespace, action, kind, folder, name string) (*authlib.CheckRequest, bool) {
 	translation, ok := resourceTranslations[kind]
 
 	if !ok {
@@ -163,7 +140,7 @@ func TranslateToCheckRequest(namespace, action, kind, folder, name string) (*aut
 		return nil, false
 	}
 
-	req := &authz.CheckRequest{
+	req := &authlib.CheckRequest{
 		Namespace: namespace,
 		Verb:      verb,
 		Group:     translation.group,
@@ -173,4 +150,33 @@ func TranslateToCheckRequest(namespace, action, kind, folder, name string) (*aut
 	}
 
 	return req, true
+}
+
+func TranslateToListRequest(namespace, action, kind string) (*authlib.ListRequest, bool) {
+	translation, ok := resourceTranslations[kind]
+
+	if !ok {
+		return nil, false
+	}
+
+	// FIXME: support different verbs
+	req := &authlib.ListRequest{
+		Namespace: namespace,
+		Group:     translation.group,
+		Resource:  translation.resource,
+	}
+
+	return req, true
+}
+
+func TranslateToGroupResource(kind string) string {
+	translation, ok := resourceTranslations[kind]
+	if !ok {
+		return ""
+	}
+	return common.FormatGroupResource(translation.group, translation.resource, "")
+}
+
+func TranslateBasicRole(name string) string {
+	return basicRolesTranslations[name]
 }

@@ -16,8 +16,7 @@ Groups are mapped to [fixed](https://grafana.com/docs/grafana/<GRAFANA_VERSION>/
 > **Note:** Available in [Grafana Enterprise](https://grafana.com/docs/grafana/<GRAFANA_VERSION>/introduction/grafana-enterprise) and [Grafana Cloud](/docs/grafana-cloud/).
 
 {{% admonition type="note" %}}
-This feature is behind the `groupAttributeSync` feature toggle.
-You can enable feature toggles through configuration file or environment variables. See configuration [docs](/docs/grafana/<GRAFANA_VERSION>/setup-grafana/configure-grafana/#feature_toggles) for details.
+This feature is currently in [private preview](https://grafana.com/docs/release-life-cycle/#private-preview) and behind the `groupAttributeSync` feature toggle. Please contact support to have this feature enabled.
 {{% /admonition %}}
 
 When a user logs in, Grafana checks the user's external group memberships and the configured group to role mappings to assign the corresponding roles to the user.
@@ -25,6 +24,17 @@ If the user's group memberships change or a new mapping is created, the user's r
 If a group mapping is removed, the role assignment to users for the group mapping is revoked immediately.
 
 Role mappings are tied to organizations, so you can have different mappings for different organizations.
+
+## Supported providers
+
+- [Azure AD](https://grafana.com/docs/grafana/<GRAFANA_VERSION>/setup-grafana/configure-security/configure-authentication/azuread#group-sync-enterprise-only)
+- [Generic OAuth integration](https://grafana.com/docs/grafana/<GRAFANA_VERSION>/setup-grafana/configure-security/configure-authentication/generic-oauth#configure-group-synchronization)
+- [GitHub OAuth](https://grafana.com/docs/grafana/<GRAFANA_VERSION>/setup-grafana/configure-security/configure-authentication/github#configure-group-synchronization)
+- [GitLab OAuth](https://grafana.com/docs/grafana/<GRAFANA_VERSION>/setup-grafana/configure-security/configure-authentication/gitlab#configure-group-synchronization)
+- [Google OAuth](https://grafana.com/docs/grafana/<GRAFANA_VERSION>/setup-grafana/configure-security/configure-authentication/google#configure-group-synchronization)
+- [LDAP](https://grafana.com/docs/grafana/<GRAFANA_VERSION>/setup-grafana/configure-security/configure-authentication/enhanced-ldap#ldap-group-synchronization)
+- [Okta](https://grafana.com/docs/grafana/<GRAFANA_VERSION>/setup-grafana/configure-security/configure-authentication/okta#configure-group-synchronization-enterprise-only)
+- [SAML](https://grafana.com/docs/grafana/<GRAFANA_VERSION>/setup-grafana/configure-security/configure-authentication/saml#configure-group-synchronization)
 
 ## Create role mappings for a new group
 

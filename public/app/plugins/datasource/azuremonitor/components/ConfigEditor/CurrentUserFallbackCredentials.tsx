@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 
 import { AadCurrentUserCredentials, AzureCredentials, instanceOfAzureCredential } from '@grafana/azure-sdk';
 import { SelectableValue } from '@grafana/data';
-import { ConfigSection } from '@grafana/experimental';
+import { ConfigSection } from '@grafana/plugin-ui';
 import { config } from '@grafana/runtime';
 import { Select, Field, RadioButtonGroup, Alert, Stack } from '@grafana/ui';
 
@@ -13,7 +13,6 @@ import { AppRegistrationCredentials } from './AppRegistrationCredentials';
 export interface Props {
   managedIdentityEnabled: boolean;
   workloadIdentityEnabled: boolean;
-  userIdentityEnabled: boolean;
   credentials: AadCurrentUserCredentials;
   azureCloudOptions?: SelectableValue[];
   onCredentialsChange: (updatedCredentials: AzureCredentials) => void;

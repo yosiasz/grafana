@@ -11,7 +11,10 @@ import { contextSrv } from 'app/core/services/context_srv';
 import { Echo } from 'app/core/services/echo/Echo';
 
 import { ExtensionRegistriesProvider } from '../extensions/ExtensionRegistriesContext';
-import { setupPluginExtensionRegistries } from '../extensions/registry/setup';
+import { AddedComponentsRegistry } from '../extensions/registry/AddedComponentsRegistry';
+import { AddedFunctionsRegistry } from '../extensions/registry/AddedFunctionsRegistry';
+import { AddedLinksRegistry } from '../extensions/registry/AddedLinksRegistry';
+import { ExposedComponentsRegistry } from '../extensions/registry/ExposedComponentsRegistry';
 import { getPluginSettings } from '../pluginSettings';
 import { importAppPlugin } from '../plugin_loader';
 
@@ -27,9 +30,8 @@ jest.mock('../plugin_loader', () => ({
 jest.mock('@grafana/runtime', () => ({
   ...jest.requireActual('@grafana/runtime'),
   config: {
-    featureToggles: {
-      accessControlOnCall: true,
-    },
+    featureToggles: {},
+    apps: {},
     theme2: {
       breakpoints: {
         values: {
@@ -86,7 +88,12 @@ function renderUnderRouter(page = '') {
 
   appPluginNavItem.parentItem = appsSection;
 
-  const registries = setupPluginExtensionRegistries();
+  const registries = {
+    addedComponentsRegistry: new AddedComponentsRegistry(),
+    exposedComponentsRegistry: new ExposedComponentsRegistry(),
+    addedLinksRegistry: new AddedLinksRegistry(),
+    addedFunctionsRegistry: new AddedFunctionsRegistry(),
+  };
   const pagePath = page ? `/${page}` : '';
   const route = {
     path: `/a/:pluginId/*`,

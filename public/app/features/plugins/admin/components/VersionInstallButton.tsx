@@ -1,24 +1,25 @@
 import { css } from '@emotion/css';
 import { useEffect, useState } from 'react';
-import { gt } from 'semver';
+import { gt, valid } from 'semver';
 
 import { GrafanaTheme2 } from '@grafana/data';
-import { reportInteraction } from '@grafana/runtime';
+import { config, reportInteraction } from '@grafana/runtime';
 import { Badge, Button, ConfirmModal, Icon, Spinner, useStyles2 } from '@grafana/ui';
 import { t } from 'app/core/internationalization';
 
+import { isPreinstalledPlugin } from '../helpers';
 import { useInstall } from '../state/hooks';
-import { Version } from '../types';
+import { PluginStatus, Version } from '../types';
 
-const PLUGINS_VERSION_PAGE_INSTALL_INTERACTION_EVENT_NAME = 'plugins_upgrade_clicked';
+const PLUGINS_VERSION_PAGE_UPGRADE_INTERACTION_EVENT_NAME = 'plugins_upgrade_clicked';
 const PLUGINS_VERSION_PAGE_CHANGE_INTERACTION_EVENT_NAME = 'plugins_downgrade_clicked';
-
 interface Props {
   pluginId: string;
   version: Version;
   latestCompatibleVersion?: string;
   installedVersion?: string;
   disabled: boolean;
+  tooltip?: string;
   onConfirmInstallation: () => void;
 }
 
@@ -28,6 +29,7 @@ export const VersionInstallButton = ({
   latestCompatibleVersion,
   installedVersion,
   disabled,
+  tooltip,
   onConfirmInstallation,
 }: Props) => {
   const install = useInstall();
@@ -35,7 +37,7 @@ export const VersionInstallButton = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const styles = useStyles2(getStyles);
 
-  const isDowngrade = installedVersion && gt(installedVersion, version.version);
+  const installState = getInstallState(installedVersion, version.version);
 
   useEffect(() => {
     if (installedVersion === version.version) {
@@ -58,8 +60,8 @@ export const VersionInstallButton = ({
       schema_version: '1.0.0',
     };
 
-    if (!installedVersion) {
-      reportInteraction(PLUGINS_VERSION_PAGE_INSTALL_INTERACTION_EVENT_NAME, trackProps);
+    if (installState === PluginStatus.UPDATE) {
+      reportInteraction(PLUGINS_VERSION_PAGE_UPGRADE_INTERACTION_EVENT_NAME, trackProps);
     } else {
       reportInteraction(PLUGINS_VERSION_PAGE_CHANGE_INTERACTION_EVENT_NAME, {
         ...trackProps,
@@ -67,13 +69,13 @@ export const VersionInstallButton = ({
       });
     }
 
-    install(pluginId, version.version, true);
+    install(pluginId, version.version, installState);
     setIsInstalling(true);
     onConfirmInstallation();
   };
 
   const onInstallClick = () => {
-    if (isDowngrade) {
+    if (installState === PluginStatus.DOWNGRADE) {
       setIsModalOpen(true);
     } else {
       performInstallation();
@@ -88,13 +90,9 @@ export const VersionInstallButton = ({
     setIsModalOpen(false);
   };
 
-  let label = 'Downgrade';
+  const isPreinstalled = isPreinstalledPlugin(pluginId);
 
-  if (!installedVersion) {
-    label = 'Install';
-  } else if (gt(version.version, installedVersion)) {
-    label = 'Upgrade';
-  }
+  const hidden = getButtonHiddenState(installState, isPreinstalled);
 
   return (
     <>
@@ -106,8 +104,12 @@ export const VersionInstallButton = ({
         variant={latestCompatibleVersion === version.version ? 'primary' : 'secondary'}
         onClick={onInstallClick}
         className={styles.button}
+        hidden={hidden}
+        tooltip={tooltip}
+        tooltipPlacement="bottom-start"
       >
-        {label} {isInstalling ? <Spinner className={styles.spinner} inline size="sm" /> : getIcon(label)}
+        {getLabel(installState)}{' '}
+        {isInstalling ? <Spinner className={styles.spinner} inline size="sm" /> : getIcon(installState)}
       </Button>
       <ConfirmModal
         isOpen={isModalOpen}
@@ -123,14 +125,49 @@ export const VersionInstallButton = ({
   );
 };
 
-function getIcon(label: string) {
-  if (label === 'Downgrade') {
+function getLabel(installState: PluginStatus) {
+  switch (installState) {
+    case PluginStatus.INSTALL:
+      return 'Install';
+    case PluginStatus.UPDATE:
+      return 'Upgrade';
+    case PluginStatus.DOWNGRADE:
+      return 'Downgrade';
+    default:
+      return '';
+  }
+}
+
+function getIcon(installState: PluginStatus) {
+  if (installState === PluginStatus.DOWNGRADE) {
     return <Icon name="arrow-down" />;
   }
-  if (label === 'Upgrade') {
+  if (installState === PluginStatus.UPDATE) {
     return <Icon name="arrow-up" />;
   }
   return '';
+}
+
+function getInstallState(installedVersion?: string, version?: string): PluginStatus {
+  if (!installedVersion || !version || !valid(installedVersion) || !valid(version)) {
+    return PluginStatus.INSTALL;
+  }
+  return gt(installedVersion, version) ? PluginStatus.DOWNGRADE : PluginStatus.UPDATE;
+}
+
+function getButtonHiddenState(installState: PluginStatus, isPreinstalled: { found: boolean; withVersion: boolean }) {
+  // Default state for initial install
+  if (installState === PluginStatus.INSTALL) {
+    return false;
+  }
+
+  // Handle downgrade case
+  if (installState === PluginStatus.DOWNGRADE) {
+    return isPreinstalled.found && Boolean(config.featureToggles.preinstallAutoUpdate);
+  }
+
+  // Handle upgrade case
+  return isPreinstalled.withVersion;
 }
 
 const getStyles = (theme: GrafanaTheme2) => ({

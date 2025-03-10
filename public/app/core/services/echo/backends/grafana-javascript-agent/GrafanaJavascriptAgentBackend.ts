@@ -1,4 +1,4 @@
-import { BuildInfo } from '@grafana/data';
+import { BuildInfo, escapeRegex } from '@grafana/data';
 import { BaseTransport, defaultInternalLoggerLevel } from '@grafana/faro-core';
 import {
   initializeFaro,
@@ -10,6 +10,7 @@ import {
   FetchTransport,
   type Instrumentation,
   getWebInstrumentations,
+  Config,
 } from '@grafana/faro-web-sdk';
 import { TracingInstrumentation } from '@grafana/faro-web-tracing';
 import { EchoBackend, EchoEvent, EchoEventType } from '@grafana/runtime';
@@ -37,9 +38,8 @@ export interface GrafanaJavascriptAgentBackendOptions extends BrowserConfig {
   ignoreUrls: RegExp[];
 }
 
-const TRACKING_URLS = [
-  /.*.google-analytics.com*.*/,
-  /.*.googletagmanager.com*.*/,
+export const TRACKING_URLS = [
+  /\.(google-analytics|googletagmanager)\.com/,
   /frontend-metrics/,
   /\/collect(?:\/[\w]*)?$/,
 ];
@@ -53,9 +53,20 @@ export class GrafanaJavascriptAgentBackend
   constructor(public options: GrafanaJavascriptAgentBackendOptions) {
     // configure instrumentations.
     const instrumentations: Instrumentation[] = [];
-    const ignoreUrls = [new RegExp(`/*${options.customEndpoint}/`), ...TRACKING_URLS, ...options.ignoreUrls];
+
+    const ignoreUrls = [
+      new RegExp(`.*${escapeRegex(options.customEndpoint)}.*`),
+      ...TRACKING_URLS,
+      ...options.ignoreUrls,
+    ];
 
     const transports: BaseTransport[] = [new EchoSrvTransport({ ignoreUrls })];
+    const consoleInstrumentationOptions: Config['consoleInstrumentation'] =
+      options.allInstrumentationsEnabled || options.consoleInstrumentalizationEnabled
+        ? {
+            serializeErrors: true,
+          }
+        : {};
 
     // If in cross origin iframe, default to writing to instance logging endpoint
     if (options.customEndpoint && !isCrossOriginIframe()) {
@@ -90,6 +101,8 @@ export class GrafanaJavascriptAgentBackend
       instrumentations: options.allInstrumentationsEnabled
         ? instrumentations
         : [...getWebInstrumentations(), new TracingInstrumentation()],
+      consoleInstrumentation: consoleInstrumentationOptions,
+      trackWebVitalsAttribution: options.webVitalsInstrumentalizationEnabled || options.allInstrumentationsEnabled,
       transports,
       ignoreErrors: [
         'ResizeObserver loop limit exceeded',

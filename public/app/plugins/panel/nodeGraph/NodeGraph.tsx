@@ -13,7 +13,7 @@ import { Marker } from './Marker';
 import { Node } from './Node';
 import { ViewControls } from './ViewControls';
 import { Config, defaultConfig, useLayout } from './layout';
-import { EdgeDatumLayout, NodeDatum, NodesMarker } from './types';
+import { EdgeDatumLayout, NodeDatum, NodesMarker, ZoomMode } from './types';
 import { useCategorizeFrames } from './useCategorizeFrames';
 import { useContextMenu } from './useContextMenu';
 import { useFocusPositionOnLayout } from './useFocusPositionOnLayout';
@@ -112,8 +112,9 @@ interface Props {
   getLinks: (dataFrame: DataFrame, rowIndex: number) => LinkModel[];
   nodeLimit?: number;
   panelId?: string;
+  zoomMode?: ZoomMode;
 }
-export function NodeGraph({ getLinks, dataFrames, nodeLimit, panelId }: Props) {
+export function NodeGraph({ getLinks, dataFrames, nodeLimit, panelId, zoomMode }: Props) {
   const nodeCountLimit = nodeLimit || defaultNodeCountLimit;
   const { edges: edgesDataFrames, nodes: nodesDataFrames } = useCategorizeFrames(dataFrames);
 
@@ -173,7 +174,8 @@ export function NodeGraph({ getLinks, dataFrames, nodeLimit, panelId }: Props) {
   const focusPosition = useFocusPositionOnLayout(config, nodes, focusedNodeId);
   const { panRef, zoomRef, onStepUp, onStepDown, isPanning, position, scale, isMaxZoom, isMinZoom } = usePanAndZoom(
     bounds,
-    focusPosition
+    focusPosition,
+    zoomMode
   );
 
   const { onEdgeOpen, onNodeOpen, MenuComponent } = useContextMenu(
@@ -225,6 +227,7 @@ export function NodeGraph({ getLinks, dataFrames, nodeLimit, panelId }: Props) {
                 onMouseEnter={setEdgeHover}
                 onMouseLeave={clearEdgeHover}
                 svgIdNamespace={svgIdNamespace}
+                processedNodesLength={processed.nodes.length}
               />
             )}
             <Nodes
@@ -346,13 +349,14 @@ interface EdgesProps {
   onClick: (event: MouseEvent<SVGElement>, link: EdgeDatumLayout) => void;
   onMouseEnter: (id: string) => void;
   onMouseLeave: (id: string) => void;
+  processedNodesLength: number;
 }
 const Edges = memo(function Edges(props: EdgesProps) {
   return (
     <>
       {props.edges.map((e) => (
         <Edge
-          key={e.id}
+          key={`${e.id}-${e.source.y ?? ''}-${props.processedNodesLength}`}
           edge={e}
           hovering={
             (e.source as NodeDatum).id === props.nodeHoveringId ||
@@ -363,6 +367,7 @@ const Edges = memo(function Edges(props: EdgesProps) {
           onMouseEnter={props.onMouseEnter}
           onMouseLeave={props.onMouseLeave}
           svgIdNamespace={props.svgIdNamespace}
+          processedNodesLength={props.processedNodesLength}
         />
       ))}
     </>
@@ -392,8 +397,8 @@ const EdgeLabels = memo(function EdgeLabels(props: EdgeLabelsProps) {
   );
 });
 
-function usePanAndZoom(bounds: Bounds, focus?: { x: number; y: number }) {
-  const { scale, onStepDown, onStepUp, ref, isMax, isMin } = useZoom();
+function usePanAndZoom(bounds: Bounds, focus?: { x: number; y: number }, zoomMode?: ZoomMode) {
+  const { scale, onStepDown, onStepUp, ref, isMax, isMin } = useZoom({ zoomMode });
   const { state: panningState, ref: panRef } = usePanning<SVGSVGElement>({
     scale,
     bounds,
